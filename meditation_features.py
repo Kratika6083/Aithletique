@@ -1,4 +1,4 @@
-# meditation_refined.py (final working version)
+ # meditation_refined.py (final working version)
 import cv2
 import time
 import numpy as np
@@ -152,6 +152,15 @@ def run_meditation_session(duration_minutes):
                     voice_manager.speak("shoulders", "Keep your shoulders level and relaxed.")
                     last_feedback["shoulders"] = now
 
+            # Track metrics regardless of meditation start
+            usable_frames += 1
+            if not posture_correct:
+                incorrect_posture += 1
+            if not head_aligned:
+                head_issues += 1
+            if not shoulders_level:
+                shoulder_issues += 1
+
             if not eyes_closed or not posture_correct or not head_aligned or not shoulders_level:
                 if not st.session_state.alert_shown:
                     feedback_box.markdown("### ⏳ Waiting for correct posture and eyes closed to begin.")
@@ -163,15 +172,6 @@ def run_meditation_session(duration_minutes):
             if st.session_state.alert_shown:
                 feedback_box.markdown("")
                 st.session_state.alert_shown = False
-
-            usable_frames += 1
-
-            if not posture_correct:
-                incorrect_posture += 1
-            if not head_aligned:
-                head_issues += 1
-            if not shoulders_level:
-                shoulder_issues += 1
 
             if landmarks and len(landmarks) > 24:
                 left_shoulder, right_shoulder = landmarks[11], landmarks[12]
@@ -227,8 +227,8 @@ def run_meditation_session(duration_minutes):
         face_mesh.close()
 
         if usable_frames == 0:
-            st.warning("Session ended without valid meditation posture. No summary to show.")
-            return
+            st.warning("⚠️ Posture was never valid, but summary will still be shown.")
+            usable_frames = 1
 
         pose_accuracy = 100 - (incorrect_posture / usable_frames * 100)
         head_ratio = 100 - (head_issues / usable_frames * 100)
@@ -270,7 +270,14 @@ def run_meditation_session(duration_minutes):
             "feedback": feedback_msgs + improvement_tips
         }
 
-        st.download_button("⬇️ Download Session Report", json.dumps(summary, indent=2), file_name="meditation_summary.json")
-        log_session(pose="meditation", reps=0, feedback_list=summary["feedback"], duration=summary["duration_seconds"])
-        st.session_state["meditation_summary"] = feedback_msgs + improvement_tips
-        return feedback_msgs + improvement_tips
+    st.session_state["meditation_summary"] = feedback_msgs + improvement_tips
+    st.session_state["show_summary"] = True
+    st.download_button("⬇️ Download Session Report", json.dumps(summary, indent=2), file_name="meditation_summary.json")
+    log_session(pose="meditation", reps=0, feedback_list=summary["feedback"], duration=summary["duration_seconds"])
+    st.session_state["meditation_summary"] = feedback_msgs + improvement_tips
+    st.session_state["show_summary"] = True
+    st.markdown("## ✅ Meditation Session Complete")
+    st.markdown("### 🧘 Session Summary")
+    for msg in feedback_msgs + improvement_tips:
+        st.markdown(f"- {msg}")
+    return feedback_msgs + improvement_tips
