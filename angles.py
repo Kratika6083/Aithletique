@@ -39,3 +39,15 @@ def get_point_coords(landmarks, index, frame_width, frame_height):
     x = int(landmarks[index][0] * frame_width)
     y = int(landmarks[index][1] * frame_height)
     return (x, y)
+def calculate_angle_from_landmarks(landmarks, a_index, b_index, c_index):
+    a = np.array(landmarks[a_index])
+    b = np.array(landmarks[b_index])
+    c = np.array(landmarks[c_index])
+
+    radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
+    angle = np.abs(radians * 180.0 / np.pi)
+
+    if angle > 180.0:
+        angle = 360 - angle
+
+    return angle
