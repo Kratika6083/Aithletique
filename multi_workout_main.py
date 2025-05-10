@@ -32,6 +32,9 @@ def run_workout(exercise_name, joint_indices, thresholds):
     reference_pose_path = f"pose_references/{exercise_name}_reference.npy"
     reference_pose = np.load(reference_pose_path)
 
+    angle_reference_path = f"pose_references/{exercise_name}_angles_reference.npy"
+    angle_reference_data = np.load(angle_reference_path, allow_pickle=True)
+
     reps = 0
     similarity = 0.0
     smooth_similarity = []
@@ -40,6 +43,46 @@ def run_workout(exercise_name, joint_indices, thresholds):
     last_feedback_time = 0
     cooldown = 2.5
     visibility_threshold = 0.6
+
+    feedback_rules = {
+        "pushup": {
+            "elbow": (11, 13, 15),
+            "back": (11, 23, 24),
+            "shoulder": (13, 11, 23)
+        },
+        "plank": {
+            "shoulder_hip_knee": (11, 23, 25),
+            "back": (11, 23, 24),
+            "hip_knee_ankle": (23, 25, 27)
+        },
+        "pullup": {
+            "elbow_shoulder_hip": (13, 11, 23),
+            "back": (11, 23, 24),
+            "shoulder_alignment": (12, 11, 23)
+        }
+    }
+
+    def check_angles(landmarks, ref_angles):
+        for label, (a, b, c) in feedback_rules[exercise_name].items():
+            current_angle = calculate_angle_from_landmarks(landmarks, a, b, c)
+            reference_angle = ref_angles.get(label, None)
+            if reference_angle is not None and abs(current_angle - reference_angle) > 15:
+                if label == "elbow":
+                    feedback.give_feedback("Straighten your arms more")
+                elif label == "back":
+                    feedback.give_feedback("Keep your back straight")
+                elif label == "shoulder_hip_knee":
+                    feedback.give_feedback("Keep your hips aligned")
+                elif label == "elbow_shoulder_hip":
+                    feedback.give_feedback("Lift your body higher")
+                elif label == "shoulder":
+                    feedback.give_feedback("Bring shoulders forward")
+                elif label == "hip_knee_ankle":
+                    feedback.give_feedback("Align your knees with hips and ankles")
+                elif label == "shoulder_alignment":
+                    feedback.give_feedback("Adjust your shoulder posture")
+
+    frame_index = 0
 
     while cap.isOpened():
         if stop_button:
@@ -66,6 +109,7 @@ def run_workout(exercise_name, joint_indices, thresholds):
         landmarks = [lm[:3] for lm in landmarks_full]
         flat_landmarks = np.array(landmarks).flatten()
 
+        # Multiple angles could be used here to support richer feedback
         angle = calculate_angle_from_landmarks(landmarks_full, *joint_indices)
         deep_position = angle < thresholds['down']
         correct_posture = thresholds['back'][0] < calculate_angle_from_landmarks(landmarks_full, *thresholds['back'][1]) < thresholds['back'][1]
@@ -76,6 +120,12 @@ def run_workout(exercise_name, joint_indices, thresholds):
             if len(smooth_similarity) > 5:
                 smooth_similarity.pop(0)
             similarity = np.mean(smooth_similarity)
+
+            if time.time() - last_feedback_time > cooldown:
+                if frame_index < len(angle_reference_data):
+                    ref_angles = angle_reference_data[frame_index].item()
+                    check_angles(landmarks_full, ref_angles)
+                    last_feedback_time = time.time()
         else:
             similarity = 0.0
             smooth_similarity.clear()
@@ -90,6 +140,7 @@ def run_workout(exercise_name, joint_indices, thresholds):
         stframe.image(frame, channels="BGR")
         rep_placeholder.markdown(f"### 🏋️ Repetitions: **{reps}**")
         similarity_placeholder.progress(int(similarity * 100), text=f"🎯 Accuracy: {similarity * 100:.1f}%")
+        frame_index += 1
 
     cap.release()
     st.success("Workout session ended.")
