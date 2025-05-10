@@ -1,53 +1,50 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-import os
-from backend.feedback_engine.pose_comparator import extract_important_angles, save_reference_angles
-
-# CONFIGURATION
-REFERENCE_DIR = "pose_references"
-POSE_NAME = "tadasana"  # Change this when creating other poses
-
-if not os.path.exists(REFERENCE_DIR):
-    os.makedirs(REFERENCE_DIR)
 
 mp_pose = mp.solutions.pose
-pose = mp_pose.Pose(static_image_mode=False, model_complexity=2)
-mp_drawing = mp.solutions.drawing_utils
 
-cap = cv2.VideoCapture(0)
+def extract_average_pose(video_path, output_path):
+    pose = mp_pose.Pose()
+    cap = cv2.VideoCapture(video_path)
+    landmarks_list = []
+    frame_count = 0
+    valid_frames = 0
 
-print("\n📸 Press 's' to capture and save the reference pose.")
-print("❌ Press 'q' to quit without saving.\n")
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
+        frame_count += 1
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = pose.process(rgb_frame)
 
-    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = pose.process(img_rgb)
+        if results.pose_landmarks:
+            valid_frames += 1
+            landmarks = []
+            for lm in results.pose_landmarks.landmark:
+                landmarks.append([lm.x, lm.y, lm.z])
+            landmarks_list.append(landmarks)
 
-    if results.pose_landmarks:
-        mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+        # Display the frame
+        cv2.imshow('Processing Video', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-    cv2.imshow("Capture Reference Pose", frame)
+    cap.release()
+    pose.close()
+    cv2.destroyAllWindows()
 
-    key = cv2.waitKey(1) & 0xFF
+    print(f"Processed {frame_count} frames, valid pose frames: {valid_frames}")
 
-    if key == ord('s'):
-        landmarks = [(lm.x, lm.y, lm.z) for lm in results.pose_landmarks.landmark]
-        angles = extract_important_angles(landmarks)
+    if valid_frames == 0:
+        print("❌ No valid pose landmarks detected. Check your video quality and subject visibility.")
+        return
 
-        save_path = os.path.join(REFERENCE_DIR, f"{POSE_NAME}.npz")
-        save_reference_angles(angles, save_path)
+    avg_landmarks = np.mean(np.array(landmarks_list), axis=0).flatten()
+    np.save(output_path, avg_landmarks)
+    print(f"✅ Saved reference pose to {output_path}")
 
-        print(f"\n✅ Reference pose saved successfully: {save_path}\n")
-        break
-
-    elif key == ord('q'):
-        print("\n❌ Exiting without saving.\n")
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+# Example usage
+extract_average_pose("workout_videos/Squat_correct.mp4", "pose_references/squat_reference.npy")
