@@ -1,4 +1,4 @@
-# backend/pose_detection/mediapipe_model.py
+# mediapipe_model.py
 
 import cv2
 import mediapipe as mp
@@ -15,18 +15,22 @@ class PoseDetector:
         )
         self.mp_drawing = mp.solutions.drawing_utils
 
+        self.landmark_map = {
+            11: 'LEFT_SHOULDER',
+            12: 'RIGHT_SHOULDER',
+            23: 'LEFT_HIP',
+            24: 'RIGHT_HIP',
+            25: 'LEFT_KNEE',
+            26: 'RIGHT_KNEE',
+            27: 'LEFT_ANKLE',
+            28: 'RIGHT_ANKLE',
+        }
+
     def detect_pose(self, frame):
-        """
-        Processes the input frame and returns the detection results.
-        """
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.pose.process(rgb_frame)
-        return results
+        return self.pose.process(rgb_frame)
 
     def draw_landmarks(self, frame, results):
-        """
-        Draws the pose landmarks on the frame.
-        """
         if results.pose_landmarks:
             self.mp_drawing.draw_landmarks(
                 frame,
@@ -35,14 +39,23 @@ class PoseDetector:
             )
         return frame
 
+    def get_named_landmarks(self, results):
+        if not results.pose_landmarks:
+            return {}
+
+        named_landmarks = {}
+        for idx, lm in enumerate(results.pose_landmarks.landmark):
+            if idx in self.landmark_map:
+                named_landmarks[self.landmark_map[idx]] = (lm.x, lm.y)
+        return named_landmarks
+
     def get_landmarks(self, results):
         """
-        Extracts landmark coordinates if available.
-        Returns a list of (x, y, z, visibility) tuples.
+        Returns raw list of (x, y, z, visibility) for all landmarks.
         """
         if not results.pose_landmarks:
             return []
-        
+
         landmarks = []
         for lm in results.pose_landmarks.landmark:
             landmarks.append((lm.x, lm.y, lm.z, lm.visibility))
