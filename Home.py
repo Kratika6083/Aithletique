@@ -60,17 +60,14 @@ with tabs[0]:
             st.info("No meditation session summary available. Start a session to see results.")
 
     else:
-        if st.button("🎥 Start Yoga Session"):
-            st.session_state["start_yoga_session"] = True
-
-        if st.session_state.get("start_yoga_session", False):
+        if st.button("🎥 Start Yoga Session", key="start_yoga"):
             run_pose_detection(pose_name=pose_type.lower(), category="Yoga & Meditation")
 
 # -------------------------
 # Workout & Training Tab
 # -------------------------
 with tabs[1]:
-    pose_type = st.selectbox("🎯 Choose Your Activity:", ["Squat", "Pushup", "Lunge", "Plank", "Pull-up"], key="workout_select")
+    pose_type = st.selectbox("🎯 Choose Your Activity:", ["Squat", "Pushup", "Plank", "Pull-up"], key="workout_select")
 
     st.markdown(f"📝 Live feedback for: **{pose_type}**")
 
