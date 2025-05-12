@@ -1,4 +1,4 @@
-import cv2
+import cv2 
 import tempfile
 import streamlit as st
 import time
@@ -50,19 +50,23 @@ def run_pose_detection(pose_name="tadasana", category="Yoga & Meditation"):
             st.error(f"❌ No motion reference found for {pose_name}.")
             return
 
-    if st.button("🎥 Start Session", key=f"start_{pose_name}"):
-        st.session_state.running = True
-        st.session_state.start_time = time.time()
-        st.session_state.feedback_collected = set()
-        st.session_state.stop = False
-        st.session_state.reps = 0
-        st.session_state.pose_held = False
-        st.success("✅ Session started. Your form will now be monitored...")
+    st.session_state.running = True
+    st.session_state.start_time = time.time()
+    st.session_state.feedback_collected = set()
+    st.session_state.stop = False
+    st.session_state.reps = 0
+    st.session_state.pose_held = False
+    st.success("✅ Session started. Your form will now be monitored...")
 
-    if st.session_state.running:
-        process_camera(pose_name, detector, coach, reference_landmarks, motion_reference)
+    # Stop button rendered ONCE
+    stop_button_placeholder = st.empty()
 
-def process_camera(pose_name, detector, coach, reference_landmarks, motion_reference):
+    if stop_button_placeholder.button("🔚 Stop Session", key=f"stop_button_once_{pose_name}"):
+        st.session_state.stop = True
+
+    process_camera(pose_name, detector, coach, reference_landmarks, motion_reference, stop_button_placeholder)
+
+def process_camera(pose_name, detector, coach, reference_landmarks, motion_reference, stop_button_placeholder):
     camera = cv2.VideoCapture(0)
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
     stframe = st.empty()
@@ -70,14 +74,13 @@ def process_camera(pose_name, detector, coach, reference_landmarks, motion_refer
     accuracy_display = st.empty()
     reps_display = st.empty()
 
-    stop_button = st.button("🔚 Stop Session", key=f"stop_button_{pose_name}")
-    if stop_button:
-        st.session_state.stop = True
-
     last_accuracy = 0
     motion_buffer = []
 
     while camera.isOpened():
+        if st.session_state.stop:
+            break
+
         ret, frame = camera.read()
         if not ret:
             st.error("❌ Camera error.")
@@ -86,7 +89,6 @@ def process_camera(pose_name, detector, coach, reference_landmarks, motion_refer
         frame = cv2.flip(frame, 1)
         results = detector.detect_pose(frame)
         frame = detector.draw_landmarks(frame, results)
-
         landmarks = detector.get_landmarks(results)
 
         if landmarks:
@@ -95,10 +97,8 @@ def process_camera(pose_name, detector, coach, reference_landmarks, motion_refer
                 accuracy_display.metric("🎯 Accuracy", "0%")
             else:
                 if reference_landmarks is not None:
-                    # NEW CORRECTED: Directly pass landmarks to compute_pose_accuracy
                     accuracy = compute_pose_accuracy(landmarks, reference_landmarks)
                     last_accuracy = (0.7 * last_accuracy) + (0.3 * accuracy)
-
                     accuracy_display.metric("🎯 Accuracy", f"{last_accuracy:.2f}%")
 
                     if last_accuracy >= 90:
@@ -109,13 +109,11 @@ def process_camera(pose_name, detector, coach, reference_landmarks, motion_refer
                         feedback_placeholder.error("❌ Major correction needed.")
                 elif motion_reference is not None:
                     motion_buffer.append(landmarks)
-
                     if len(motion_buffer) > 10:
                         motion_buffer = motion_buffer[-10:]
 
                     accuracy = compute_motion_similarity(motion_buffer, motion_reference)
                     last_accuracy = (0.7 * last_accuracy) + (0.3 * accuracy)
-
                     accuracy_display.metric("🎯 Accuracy", f"{last_accuracy:.2f}%")
                     reps_display.metric("✅ Reps", st.session_state.reps)
 
@@ -132,15 +130,11 @@ def process_camera(pose_name, detector, coach, reference_landmarks, motion_refer
                         coach.speak("Adjust your form!")
                     else:
                         feedback_placeholder.markdown("### ✅ Looking good!")
-
         else:
             feedback_placeholder.warning("⚠️ No pose detected.")
 
         cv2.imwrite(temp_file.name, frame)
         stframe.image(temp_file.name, channels="BGR", use_container_width=True)
-
-        if st.session_state.stop:
-            break
 
         time.sleep(0.5)
 
@@ -156,8 +150,14 @@ def process_camera(pose_name, detector, coach, reference_landmarks, motion_refer
 
     st.session_state.running = False
     st.session_state.stop = False
+    st.session_state.pose_held = False
 
     fb = list(st.session_state.feedback_collected)
-    summary = f"✅ Session saved! Duration: {duration} sec | Reps: {st.session_state.reps} | Feedbacks: {len(fb)} types."
+    stframe.empty()
+    feedback_placeholder.empty()
+    accuracy_display.empty()
+    reps_display.empty()
+    stop_button_placeholder.empty()
 
+    summary = f"✅ Session saved! Duration: {duration} sec | Reps: {st.session_state.reps} | Feedbacks: {len(fb)} types."
     st.success(summary)
